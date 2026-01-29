@@ -54,16 +54,22 @@ class GitHubBot(commands.Bot):
         # Add persistent view
         self.add_view(LastCommitButton())
         
-        # Sync commands globally (takes 1 hour to propagate)
-        synced = await self.tree.sync()
-        print(f"Commands synced successfully! {len(synced)} commands registered globally.")
+        # Check if guild ID is set for instant sync
+        if Config.DISCORD_GUILD_ID:
+            try:
+                guild_id = int(Config.DISCORD_GUILD_ID)
+                guild = discord.Object(id=guild_id)
+                
+                # Copy global commands to guild and sync (instant)
+                self.tree.copy_global_to(guild=guild)
+                synced_guild = await self.tree.sync(guild=guild)
+                print(f"✅ Synced {len(synced_guild)} commands to guild {guild_id} (instant)")
+            except ValueError:
+                print(f"⚠️ Invalid DISCORD_GUILD_ID: {Config.DISCORD_GUILD_ID}")
         
-        # If you want instant sync for testing, sync to a specific guild:
-        # Replace GUILD_ID with your server's ID
-        # guild = discord.Object(id=YOUR_GUILD_ID)
-        # self.tree.copy_global_to(guild=guild)
-        # synced_guild = await self.tree.sync(guild=guild)
-        # print(f"Synced {len(synced_guild)} commands to guild {guild.id}")
+        # Also sync globally (takes up to 1 hour to propagate)
+        synced = await self.tree.sync()
+        print(f"✅ Synced {len(synced)} commands globally (may take up to 1 hour)")
     
     async def on_ready(self):
         """Called when bot is ready"""

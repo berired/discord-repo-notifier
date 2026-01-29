@@ -5,6 +5,7 @@ load_dotenv()
 
 class Config:
     DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+    DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")  # Optional: for instant command sync
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
     GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
