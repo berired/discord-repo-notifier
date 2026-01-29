@@ -39,11 +39,14 @@ class GitHubBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.guilds = True
+        intents.members = True
         
         super().__init__(
             command_prefix="!",
             intents=intents,
-            help_command=None
+            help_command=None,
+            status=discord.Status.online
         )
         
     async def setup_hook(self):
@@ -62,8 +65,9 @@ class GitHubBot(commands.Bot):
         print(f'Connected to {len(self.guilds)} guilds')
         print('------')
         
-        # Set bot status
+        # Set bot status to Online with activity
         await self.change_presence(
+            status=discord.Status.online,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
                 name="GitHub commits"
