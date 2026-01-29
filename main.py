@@ -1,8 +1,3 @@
-# Import compatibility shim FIRST (before discord.py)
-import sys
-if sys.version_info >= (3, 13):
-    import audioop_shim
-
 import asyncio
 import threading
 from bot import bot, run_bot, send_webhook_notification
