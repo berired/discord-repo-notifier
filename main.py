@@ -26,15 +26,13 @@ def main():
         # Initialize database
         asyncio.run(init_database())
         
-        # Set notification callback
-        set_notification_callback(send_webhook_notification)
-        
         # Start Flask server in a separate thread
         flask_thread = threading.Thread(target=start_flask_server, daemon=True)
         flask_thread.start()
         print(f"Flask server started on port {Config.PORT}")
         
         # Start Discord bot (blocking)
+        # The event loop will be set after the bot starts
         print("Starting Discord bot...")
         run_bot()
         

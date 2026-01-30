@@ -10,11 +10,13 @@ app = Flask(__name__)
 
 # Store the callback function to send notifications
 notification_callback: Optional[Callable] = None
+bot_event_loop = None
 
-def set_notification_callback(callback: Callable):
+def set_notification_callback(callback: Callable, event_loop=None):
     """Set the callback function for sending notifications"""
-    global notification_callback
+    global notification_callback, bot_event_loop
     notification_callback = callback
+    bot_event_loop = event_loop
 
 def verify_signature(payload_body: bytes, signature_header: str) -> bool:
     """Verify GitHub webhook signature"""
@@ -54,11 +56,13 @@ def github_webhook():
             return jsonify({'error': 'No commits in payload'}), 400
         
         # Send notification asynchronously
-        if notification_callback:
+        if notification_callback and bot_event_loop:
             asyncio.run_coroutine_threadsafe(
                 notification_callback(commit_data),
-                asyncio.get_event_loop()
+                bot_event_loop
             )
+        elif notification_callback and not bot_event_loop:
+            print("Warning: Bot event loop not set, cannot send notification")
         
         return jsonify({'message': 'Webhook received successfully'}), 200
     

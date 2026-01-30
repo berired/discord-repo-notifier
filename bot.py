@@ -86,6 +86,11 @@ class GitHubBot(commands.Bot):
                 name="GitHub commits"
             )
         )
+        
+        # Set the notification callback with the bot's event loop
+        from webhook_server import set_notification_callback
+        import asyncio
+        set_notification_callback(send_webhook_notification, asyncio.get_event_loop())
 
 # Initialize bot
 bot = GitHubBot()
