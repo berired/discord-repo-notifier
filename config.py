@@ -14,6 +14,7 @@ class Config:
     CLICKUP_TEAM_ID = os.getenv("CLICKUP_TEAM_ID")  # Workspace ID
     CLICKUP_SPACE_ID = os.getenv("CLICKUP_SPACE_ID")
     CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
+    DEADLINE_REMINDER_HOURS = float(os.getenv("DEADLINE_REMINDER_HOURS", 3))
     PORT = int(os.getenv("PORT", 10000))
     DATABASE_PATH = 'bot_data.db'
     

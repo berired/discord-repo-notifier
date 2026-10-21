@@ -9,6 +9,7 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - 🎨 **Beautiful Embeds** - Clean, formatted commit information
 - 🚀 **Wispbyte Deployment** - Runs on Wispbyte's Python hosting
 - 📋 **ClickUp Task Embeds** - Title, status, assignee and deadline, on demand or via ClickUp webhook
+- ⏰ **Deadline Reminders** - Automatic reminder shortly before a ClickUp task is due
 - 💾 **Persistent Storage** - Remembers notification channel settings
 
 ## Commands
@@ -116,6 +117,8 @@ The Flask server must be reachable from the internet, so `PORT` must be a port W
 
    The response includes a `secret`. Set it as `CLICKUP_WEBHOOK_SECRET` and restart the bot. Task updates are posted to the channel set with `/announcementchannel`.
 
+Deadline reminders need no webhook. Every 5 minutes the bot checks the Space and posts a reminder to the announcement channel (pinging the `/pingrole` role, if set) for each task due within `DEADLINE_REMINDER_HOURS` (default 3). Each task is reminded once per due date, so a changed due date triggers a new reminder, and completed tasks are skipped.
+
 #### 7. Test Your Bot
 
 1. In Discord, use `/announcementchannel` in your desired channel
@@ -138,6 +141,7 @@ The Flask server must be reachable from the internet, so `PORT` must be a port W
 | `CLICKUP_TEAM_ID` | ❌ No | ClickUp Workspace (team) ID |
 | `CLICKUP_SPACE_ID` | ❌ No | ClickUp Space to read the latest task from |
 | `CLICKUP_WEBHOOK_SECRET` | ❌ No | Secret returned when registering the ClickUp webhook |
+| `DEADLINE_REMINDER_HOURS` | ❌ No | Hours before a ClickUp deadline to post a reminder (default: 3) |
 | `PORT` | ❌ No | Server port (default: 10000); set to the port Wispbyte allocates |
 
 

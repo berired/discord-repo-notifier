@@ -1,7 +1,8 @@
 import asyncio
+import time
 from collections import Counter
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks as ext_tasks
 from discord import app_commands
 from database import db
 from github_api import github_api
@@ -261,6 +262,9 @@ class GitHubBot(commands.Bot):
             # No guild set: sync globally (takes up to 1 hour to propagate)
             synced = await self.tree.sync()
             print(f"✅ Synced {len(synced)} commands globally (may take up to 1 hour)")
+
+        if not deadline_reminder_loop.is_running():
+            deadline_reminder_loop.start()
     
     async def on_ready(self):
         """Called when bot is ready"""
@@ -425,6 +429,56 @@ async def send_task_notification(task_data: dict):
         print(f"Task notification sent to channel {channel_id}")
     except Exception as e:
         print(f"Error sending task notification: {e}")
+
+async def check_deadlines():
+    """Post a reminder for each task due within the reminder window, once per due date"""
+    if not clickup_api.is_configured():
+        return
+
+    channel_id = await db.get_announcement_channel()
+    channel = bot.get_channel(channel_id) if channel_id else None
+    if not isinstance(channel, discord.TextChannel):
+        return  # Nowhere to post; leave tasks unmarked so they are reminded once a channel is set
+
+    open_tasks = await asyncio.to_thread(clickup_api.get_all_tasks)
+    if open_tasks is None:
+        return
+
+    now_ms = int(time.time() * 1000)
+    window_ms = int(Config.DEADLINE_REMINDER_HOURS * 3600 * 1000)
+    await db.clear_old_reminders(now_ms)
+
+    for task in open_tasks:
+        due = task['due_ts']
+        if due is None or task['status_type'] in ('done', 'closed'):
+            continue
+        if not (now_ms < due <= now_ms + window_ms):
+            continue
+        if await db.was_reminded(task['id'], due):
+            continue
+
+        try:
+            ping = await get_ping_mention()
+            hours = f"{Config.DEADLINE_REMINDER_HOURS:g}"
+            await channel.send(
+                content=f"{ping} ⏰ **Deadline within {hours} hours!**".strip(),
+                embed=embed_builder.create_deadline_reminder_embed(task)
+            )
+            await db.mark_reminded(task['id'], due)
+            print(f"Deadline reminder sent for task {task['id']}")
+        except Exception as e:
+            print(f"Error sending deadline reminder for task {task['id']}: {e}")
+
+@ext_tasks.loop(minutes=5)
+async def deadline_reminder_loop():
+    try:
+        await check_deadlines()
+    except Exception as e:
+        print(f"Error checking deadlines: {e}")  # Keep the loop alive
+
+@deadline_reminder_loop.before_loop
+async def before_deadline_reminder_loop():
+    await bot.wait_until_ready()
 
 def run_bot():
     """Run the Discord bot"""

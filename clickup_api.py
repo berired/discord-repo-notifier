@@ -78,9 +78,11 @@ class ClickUpAPI:
 
         due_date = task.get('due_date')
         try:
-            due = datetime.fromtimestamp(int(due_date) / 1000, tz=timezone.utc)
+            due_ts = int(due_date)  # milliseconds since epoch
+            due = datetime.fromtimestamp(due_ts / 1000, tz=timezone.utc)
             formatted_due = due.strftime('%B %d, %Y at %I:%M %p UTC')
         except (TypeError, ValueError):
+            due_ts = None
             formatted_due = 'No deadline'
 
         return {
@@ -90,6 +92,9 @@ class ClickUpAPI:
             'assignees': assignees or ['Unassigned'],
             'priority': ((task.get('priority') or {}).get('priority') or '').lower() or None,
             'due_date': formatted_due,
+            'due_ts': due_ts,
+            'status_type': status.get('type'),  # open, custom, done or closed
+            'id': task.get('id'),
             'url': task.get('url', '')
         }
 

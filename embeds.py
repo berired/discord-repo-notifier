@@ -6,6 +6,7 @@ class EmbedBuilder:
     COLOR_SUCCESS = 0x57F287
     COLOR_INFO = 0x3498DB
     COLOR_CLICKUP = 0x7B68EE
+    COLOR_WARNING = 0xFEE75C
     PRIORITY_EMOJI = {'urgent': '🔴', 'high': '🟠', 'normal': '🔵', 'low': '⚪'}
 
     @staticmethod
@@ -109,6 +110,24 @@ class EmbedBuilder:
         )
 
         embed.set_footer(text="ClickUp Task Update")
+        return embed
+
+    @staticmethod
+    def create_deadline_reminder_embed(task_data: Dict) -> discord.Embed:
+        """Create a reminder embed for a task whose deadline is approaching"""
+        embed = EmbedBuilder.create_task_embed(task_data)
+        embed.title = f"⏰ Due soon: {task_data['title']}"
+        embed.color = EmbedBuilder.COLOR_WARNING
+
+        due_unix = task_data['due_ts'] // 1000
+        # Discord renders <t:...> in each viewer's own timezone
+        embed.set_field_at(
+            2,
+            name="⏰ Deadline",
+            value=f"<t:{due_unix}:F> (<t:{due_unix}:R>)",
+            inline=False
+        )
+        embed.set_footer(text="ClickUp Deadline Reminder")
         return embed
 
     @staticmethod
