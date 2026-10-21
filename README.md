@@ -7,7 +7,7 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - 🔔 **Real-time Webhook Notifications** - Get instant notifications when commits are pushed
 - 📝 **Slash Commands** - Interactive commands to view commit information
 - 🎨 **Beautiful Embeds** - Clean, formatted commit information
-- 🚀 **Railway Deployment** - Easy deployment on Railway's platform
+- 🚀 **Wispbyte Deployment** - Runs on Wispbyte's Python hosting
 - 💾 **Persistent Storage** - Remembers notification channel settings
 
 ## Commands
@@ -16,9 +16,7 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - `/lastcommit` - Fetch and display the latest commit
 - `/announcementchannel` - Set the channel for webhook notifications (Admin only)
 
-## Quick Deploy to Railway
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
+## Deploy to Wispbyte
 
 ### Manual Deployment Steps
 
@@ -27,7 +25,7 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - GitHub account
 - Discord Bot Token ([Get it here](https://discord.com/developers/applications))
 - GitHub Personal Access Token (optional but recommended)
-- Railway account ([Sign up here](https://railway.app))
+- Wispbyte account ([Sign up here](https://wispbyte.com))
 
 #### 2. Create Discord Bot
 
@@ -50,16 +48,17 @@ A Discord bot that sends real-time notifications to your server whenever commits
 3. Select scope: `public_repo`
 4. Copy the token
 
-#### 4. Deploy to Railway
+#### 4. Deploy to Wispbyte
 
-1. **Create New Project:**
-   - Go to [Railway Dashboard](https://railway.app/dashboard)
-   - Click **"New Project"**
-   - Select **"Deploy from GitHub repo"**
-   - Connect your GitHub account and select this repository
+1. **Create a Python server** in the Wispbyte dashboard (Python 3.12 if available).
 
-2. **Configure Environment Variables:**
-   Click on your service → **Variables** tab → Add these:
+2. **Add the code:**
+   - Clone this repository onto the server, or
+   - Upload these files via the File Manager: `main.py`, `bot.py`, `config.py`, `database.py`, `embeds.py`, `github_api.py`, `webhook_server.py`, `requirements.txt`
+
+3. **Set the startup file** to `main.py` (startup command: `python main.py`). Dependencies are installed from `requirements.txt`.
+
+4. **Configure environment variables** in the panel's variables section, or upload a `.env` file next to `main.py`:
 
    ```env
    DISCORD_TOKEN=your_discord_bot_token_here
@@ -67,27 +66,22 @@ A Discord bot that sends real-time notifications to your server whenever commits
    GITHUB_REPO_OWNER=your_github_username
    GITHUB_REPO_NAME=your_repository_name
    WEBHOOK_SECRET=your_random_secret_key (optional but recommended)
-   PORT=8080
+   DISCORD_GUILD_ID=your_discord_server_id (optional, instant command sync)
+   PORT=<the port allocated to your Wispbyte server>
    ```
 
-3. **Generate Domain:**
-   - Go to **Settings** tab
-   - Scroll to **Networking**
-   - Click **"Generate Domain"**
-   - Copy your Railway URL (e.g., `https://your-app.up.railway.app`)
-
-4. **Deploy:**
-   - Railway auto-deploys on push
-   - Check **Deployments** tab for logs
+5. **Start the server** and check the console for the bot login message.
 
 #### 5. Configure GitHub Webhook
+
+The Flask server must be reachable from the internet, so `PORT` must be a port Wispbyte exposes for your server.
 
 1. Go to your GitHub repository
 2. **Settings** → **Webhooks** → **Add webhook**
 3. Configure:
-   - **Payload URL:** `https://your-railway-url.up.railway.app/webhook`
+   - **Payload URL:** `http://<your-wispbyte-address>:<port>/webhook` (use your assigned domain instead if you have one)
    - **Content type:** `application/json`
-   - **Secret:** (same as `WEBHOOK_SECRET` in Railway)
+   - **Secret:** (same as `WEBHOOK_SECRET`)
    - **Events:** Select "Just the push event"
    - **Active:** ✅ Checked
 4. Click **"Add webhook"**
@@ -109,7 +103,8 @@ A Discord bot that sends real-time notifications to your server whenever commits
 | `GITHUB_REPO_NAME` | ✅ Yes | Repository name |
 | `GITHUB_TOKEN` | ❌ No | GitHub PAT (recommended for higher rate limits) |
 | `WEBHOOK_SECRET` | ❌ No | Secret for webhook signature verification |
-| `PORT` | ❌ No | Server port (default: 10000, Railway uses 8080) |
+| `DISCORD_GUILD_ID` | ❌ No | Server ID for instant slash command sync |
+| `PORT` | ❌ No | Server port (default: 10000); set to the port Wispbyte allocates |
 
 
 ## Tech Stack
@@ -119,4 +114,3 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - **Flask** - Webhook server
 - **aiosqlite** - Async SQLite database
 - **requests** - HTTP client for GitHub API
-
