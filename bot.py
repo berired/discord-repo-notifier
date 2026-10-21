@@ -238,22 +238,29 @@ class GitHubBot(commands.Bot):
         # Add persistent view
         self.add_view(LastCommitButton())
         
-        # Check if guild ID is set for instant sync
+        guild_id = None
         if Config.DISCORD_GUILD_ID:
             try:
                 guild_id = int(Config.DISCORD_GUILD_ID)
-                guild = discord.Object(id=guild_id)
-                
-                # Copy global commands to guild and sync (instant)
-                self.tree.copy_global_to(guild=guild)
-                synced_guild = await self.tree.sync(guild=guild)
-                print(f"✅ Synced {len(synced_guild)} commands to guild {guild_id} (instant)")
             except ValueError:
                 print(f"⚠️ Invalid DISCORD_GUILD_ID: {Config.DISCORD_GUILD_ID}")
-        
-        # Also sync globally (takes up to 1 hour to propagate)
-        synced = await self.tree.sync()
-        print(f"✅ Synced {len(synced)} commands globally (may take up to 1 hour)")
+
+        if guild_id:
+            # Register commands to the guild only (instant). Registering them globally
+            # as well makes every command show up twice in that guild.
+            guild = discord.Object(id=guild_id)
+            self.tree.copy_global_to(guild=guild)
+            synced_guild = await self.tree.sync(guild=guild)
+            print(f"✅ Synced {len(synced_guild)} commands to guild {guild_id} (instant)")
+
+            # Clear any global copies left over from earlier runs
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            print("✅ Cleared global commands to avoid duplicates")
+        else:
+            # No guild set: sync globally (takes up to 1 hour to propagate)
+            synced = await self.tree.sync()
+            print(f"✅ Synced {len(synced)} commands globally (may take up to 1 hour)")
     
     async def on_ready(self):
         """Called when bot is ready"""
