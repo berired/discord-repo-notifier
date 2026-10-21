@@ -16,12 +16,13 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - `/showbot` - Display welcome message with interactive button
 - `/lastcommit` - Fetch and display the latest commit
 - `/lasttask` - Fetch and display the latest updated ClickUp task
+- `/alltasks` - List open ClickUp tasks in the Space with status, assignee, urgency and deadline. A private menu first asks for **No Filter**, or a filter by **Assignee**, **Status** or **Urgency** (ClickUp priority); the filtered list is then posted to the channel
 - `/announcementchannel [role]` - Set the channel for webhook notifications, optionally choosing the role to ping (Admin only)
 - `/pingrole [role]` - Change the role pinged on notifications; run with no role to reset (Admin only)
 
 If no role is set, commit notifications ping `@everyone` and ClickUp task notifications ping nobody.
 
-The `/showbot` message also has a **Last Task** button next to **Last Commit**.
+The `/showbot` message also has **Last Task** and **All Tasks** buttons next to **Last Commit**. **All Tasks** opens the same filter menu as `/alltasks`.
 
 ## Deploy to Wispbyte
 

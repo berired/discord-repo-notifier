@@ -1,3 +1,5 @@
+import asyncio
+from collections import Counter
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -50,6 +52,153 @@ class LastCommitButton(discord.ui.View):
         """Handle last task button click"""
         await interaction.response.defer(thinking=True)
         await send_latest_task(interaction)
+
+    @discord.ui.button(
+        label="All Tasks",
+        style=discord.ButtonStyle.secondary,
+        custom_id="all_tasks_button",
+        emoji="🗂️"
+    )
+    async def all_tasks_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        """Handle all tasks button click"""
+        await open_task_filter(interaction)
+
+URGENCY_LEVELS = ['urgent', 'high', 'normal', 'low', 'none']
+
+async def open_task_filter(interaction: discord.Interaction):
+    """Show the private filter menu for the task list"""
+    if not clickup_api.is_configured():
+        embed = embed_builder.create_error_embed(
+            "ClickUp is not configured. Set CLICKUP_API_TOKEN, CLICKUP_TEAM_ID and CLICKUP_SPACE_ID."
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    await interaction.response.send_message(
+        "🗂️ **How do you want to filter the task list?**",
+        view=TaskFilterView(interaction),
+        ephemeral=True
+    )
+
+async def publish_task_list(interaction: discord.Interaction, tasks: list, heading: str):
+    """Post the task list publicly and close the private filter menu"""
+    await interaction.followup.send(embeds=embed_builder.create_task_list_embeds(tasks, heading))
+    await interaction.edit_original_response(content="✅ Task list posted.", view=None)
+
+def normalize_status(status: str) -> str:
+    """Status key that ignores case and spacing, so 'to-do' and 'To Do' match"""
+    return " ".join(status.lower().replace("-", " ").replace("_", " ").split())
+
+# Interaction tokens last 15 minutes, so menus must expire before then to be able to say so
+MENU_TIMEOUT = 600
+
+class ExpiringMenu(discord.ui.View):
+    """View that replaces itself with an expiry notice instead of silently dying"""
+    def __init__(self, interaction: discord.Interaction):
+        super().__init__(timeout=MENU_TIMEOUT)
+        self.interaction = interaction
+
+    async def on_timeout(self):
+        try:
+            await self.interaction.edit_original_response(
+                content="⌛ This menu expired. Press **All Tasks** or use `/alltasks` again.",
+                view=None
+            )
+        except discord.HTTPException:
+            pass  # Message was dismissed or the token expired
+
+class TaskFilterView(ExpiringMenu):
+    """Private filter menu: no filter, or filter by assignee, status or urgency"""
+
+    async def _load_tasks(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        tasks = await asyncio.to_thread(clickup_api.get_all_tasks)
+        if tasks is None:
+            await interaction.edit_original_response(
+                content="❌ Failed to fetch tasks. Please check the ClickUp configuration.",
+                view=None
+            )
+        return tasks
+
+    async def _show_options(self, interaction, tasks, label, values, matches):
+        if not values:
+            await interaction.edit_original_response(content="No tasks to filter.", view=None)
+            return
+        await interaction.edit_original_response(
+            content=f"Select the **{label}** to show:",
+            view=TaskFilterSelectView(interaction, tasks, label, values, matches)
+        )
+        self.stop()
+
+    @discord.ui.button(label="No Filter", style=discord.ButtonStyle.primary, emoji="🗂️")
+    async def no_filter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        tasks = await self._load_tasks(interaction)
+        if tasks is not None:
+            await publish_task_list(interaction, tasks, "ClickUp Tasks")
+            self.stop()
+
+    @discord.ui.button(label="Assignee", style=discord.ButtonStyle.secondary, emoji="👤")
+    async def by_assignee(self, interaction: discord.Interaction, button: discord.ui.Button):
+        tasks = await self._load_tasks(interaction)
+        if tasks is not None:
+            values = sorted({a for t in tasks for a in t['assignees']})
+            await self._show_options(
+                interaction, tasks, "assignee", values,
+                lambda t, sel: any(a[:100] in sel for a in t['assignees'])
+            )
+
+    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="📌")
+    async def by_status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        tasks = await self._load_tasks(interaction)
+        if tasks is not None:
+            # One option per distinct status, labelled with its most common spelling
+            spellings = {}
+            for t in tasks:
+                spellings.setdefault(normalize_status(t['status']), Counter())[t['status']] += 1
+            values = sorted(c.most_common(1)[0][0] for c in spellings.values())
+            await self._show_options(
+                interaction, tasks, "status", values,
+                lambda t, sel: normalize_status(t['status']) in {normalize_status(s) for s in sel}
+            )
+
+    @discord.ui.button(label="Urgency", style=discord.ButtonStyle.secondary, emoji="🚨")
+    async def by_urgency(self, interaction: discord.Interaction, button: discord.ui.Button):
+        tasks = await self._load_tasks(interaction)
+        if tasks is not None:
+            await self._show_options(
+                interaction, tasks, "urgency", URGENCY_LEVELS,
+                lambda t, sel: (t.get('priority') or 'none') in sel
+            )
+
+class TaskFilterSelectView(ExpiringMenu):
+    """Dropdown of filter values; posts the matching tasks when chosen"""
+    def __init__(self, interaction: discord.Interaction, tasks: list, label: str, values: list, matches):
+        super().__init__(interaction)
+        self.tasks = tasks
+        self.label = label
+        self.matches = matches
+
+        values = values[:25]  # Discord's dropdown limit
+        select = discord.ui.Select(
+            placeholder=f"Choose {label}...",
+            min_values=1,
+            max_values=len(values),
+            options=[discord.SelectOption(label=v[:100], value=v[:100]) for v in values]
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        selected = set(interaction.data['values'])
+        await interaction.response.defer()
+        filtered = [t for t in self.tasks if self.matches(t, selected)]
+        heading = f"ClickUp Tasks — {self.label.title()}: {', '.join(sorted(selected))}"
+        await publish_task_list(interaction, filtered, heading)
+        self.stop()
 
 async def send_latest_task(interaction: discord.Interaction):
     """Fetch the latest ClickUp task and reply to a deferred interaction"""
@@ -124,7 +273,6 @@ class GitHubBot(commands.Bot):
         
         # Set the notification callback with the bot's event loop
         from webhook_server import set_notification_callback, set_task_notification_callback
-        import asyncio
         set_notification_callback(send_webhook_notification, asyncio.get_event_loop())
         set_task_notification_callback(send_task_notification)
 
@@ -158,6 +306,11 @@ async def last_task(interaction: discord.Interaction):
     """Fetch the latest task from ClickUp"""
     await interaction.response.defer(thinking=True)
     await send_latest_task(interaction)
+
+@bot.tree.command(name="alltasks", description="List all open tasks in the ClickUp Space")
+async def all_tasks(interaction: discord.Interaction):
+    """Open the filter menu for the ClickUp task list"""
+    await open_task_filter(interaction)
 
 @bot.tree.command(name="announcementchannel", description="Set the current channel for GitHub notifications")
 @app_commands.checks.has_permissions(administrator=True)

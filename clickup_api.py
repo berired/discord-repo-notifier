@@ -1,5 +1,5 @@
 import requests
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from config import Config
 from datetime import datetime, timezone
 
@@ -37,6 +37,30 @@ class ClickUpAPI:
             print(f"Error fetching latest task: {e}")
             return None
 
+    def get_all_tasks(self, max_pages: int = 10) -> Optional[List[Dict]]:
+        """Fetch every open task in the Space, most recently updated first"""
+        try:
+            url = f"{self.base_url}/team/{self.team_id}/task"
+            tasks: List[Dict] = []
+            for page in range(max_pages):
+                params = {
+                    'space_ids[]': self.space_id,
+                    'order_by': 'updated',
+                    'page': page
+                }
+                response = requests.get(url, headers=self._get_headers(), params=params, timeout=10)
+                response.raise_for_status()
+
+                data = response.json()
+                tasks.extend(data.get('tasks', []))
+                if data.get('last_page', True):
+                    break
+
+            return [self._format_task_data(t) for t in tasks]
+        except Exception as e:
+            print(f"Error fetching all tasks: {e}")
+            return None
+
     def get_task(self, task_id: str) -> Optional[Dict]:
         try:
             url = f"{self.base_url}/task/{task_id}"
@@ -64,6 +88,7 @@ class ClickUpAPI:
             'status': status.get('status', 'Unknown'),
             'status_color': status.get('color'),
             'assignees': assignees or ['Unassigned'],
+            'priority': ((task.get('priority') or {}).get('priority') or '').lower() or None,
             'due_date': formatted_due,
             'url': task.get('url', '')
         }
