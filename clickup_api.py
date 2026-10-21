@@ -22,8 +22,7 @@ class ClickUpAPI:
             url = f"{self.base_url}/team/{self.team_id}/task"
             params = {
                 'space_ids[]': self.space_id,
-                'order_by': 'updated',
-                'reverse': 'true',
+                'order_by': 'updated',  # newest first; reverse=true would flip to oldest first
                 'page': 0
             }
             response = requests.get(url, headers=self._get_headers(), params=params, timeout=10)
