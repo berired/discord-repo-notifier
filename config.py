@@ -10,6 +10,10 @@ class Config:
     GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
     GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
     WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', "")
+    CLICKUP_API_TOKEN = os.getenv("CLICKUP_API_TOKEN")  # Optional: enables ClickUp task embeds
+    CLICKUP_TEAM_ID = os.getenv("CLICKUP_TEAM_ID")  # Workspace ID
+    CLICKUP_SPACE_ID = os.getenv("CLICKUP_SPACE_ID")
+    CLICKUP_WEBHOOK_SECRET = os.getenv("CLICKUP_WEBHOOK_SECRET", "")
     PORT = int(os.getenv("PORT", 10000))
     DATABASE_PATH = 'bot_data.db'
     

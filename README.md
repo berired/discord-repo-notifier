@@ -8,13 +8,20 @@ A Discord bot that sends real-time notifications to your server whenever commits
 - 📝 **Slash Commands** - Interactive commands to view commit information
 - 🎨 **Beautiful Embeds** - Clean, formatted commit information
 - 🚀 **Wispbyte Deployment** - Runs on Wispbyte's Python hosting
+- 📋 **ClickUp Task Embeds** - Title, status, assignee and deadline, on demand or via ClickUp webhook
 - 💾 **Persistent Storage** - Remembers notification channel settings
 
 ## Commands
 
 - `/showbot` - Display welcome message with interactive button
 - `/lastcommit` - Fetch and display the latest commit
-- `/announcementchannel` - Set the channel for webhook notifications (Admin only)
+- `/lasttask` - Fetch and display the latest updated ClickUp task
+- `/announcementchannel [role]` - Set the channel for webhook notifications, optionally choosing the role to ping (Admin only)
+- `/pingrole [role]` - Change the role pinged on notifications; run with no role to reset (Admin only)
+
+If no role is set, commit notifications ping `@everyone` and ClickUp task notifications ping nobody.
+
+The `/showbot` message also has a **Last Task** button next to **Last Commit**.
 
 ## Deploy to Wispbyte
 
@@ -54,7 +61,7 @@ A Discord bot that sends real-time notifications to your server whenever commits
 
 2. **Add the code:**
    - Clone this repository onto the server, or
-   - Upload these files via the File Manager: `main.py`, `bot.py`, `config.py`, `database.py`, `embeds.py`, `github_api.py`, `webhook_server.py`, `requirements.txt`
+   - Upload these files via the File Manager: `main.py`, `bot.py`, `config.py`, `database.py`, `embeds.py`, `github_api.py`, `clickup_api.py`, `webhook_server.py`, `requirements.txt`
 
 3. **Set the startup file** to `main.py` (startup command: `python main.py`). Dependencies are installed from `requirements.txt`.
 
@@ -86,7 +93,29 @@ The Flask server must be reachable from the internet, so `PORT` must be a port W
    - **Active:** ✅ Checked
 4. Click **"Add webhook"**
 
-#### 6. Test Your Bot
+#### 6. Connect ClickUp (Optional)
+
+1. In ClickUp, go to **Settings** → **Apps** and generate a **Personal API Token**. Set it as `CLICKUP_API_TOKEN`.
+2. The Workspace (team) ID is the first number in your ClickUp URL (`app.clickup.com/<team_id>/...`). Set it as `CLICKUP_TEAM_ID`.
+3. Find the Space ID by listing your Spaces and copying the `id` of the one to track, then set it as `CLICKUP_SPACE_ID`:
+
+   ```bash
+   curl "https://api.clickup.com/api/v2/team/<TEAM_ID>/space" -H "Authorization: <CLICKUP_API_TOKEN>"
+   ```
+
+4. Restart the bot. `/lasttask` and the **Last Task** button now show the most recently updated task across all Lists in that Space.
+5. For automatic notifications, register a webhook (ClickUp has no UI for this):
+
+   ```bash
+   curl -X POST "https://api.clickup.com/api/v2/team/<TEAM_ID>/webhook" \
+     -H "Authorization: <CLICKUP_API_TOKEN>" \
+     -H "Content-Type: application/json" \
+     -d '{"endpoint": "http://<your-wispbyte-address>:<port>/clickup-webhook", "events": ["taskCreated", "taskStatusUpdated", "taskAssigneeUpdated", "taskDueDateUpdated"], "space_id": "<CLICKUP_SPACE_ID>"}'
+   ```
+
+   The response includes a `secret`. Set it as `CLICKUP_WEBHOOK_SECRET` and restart the bot. Task updates are posted to the channel set with `/announcementchannel`.
+
+#### 7. Test Your Bot
 
 1. In Discord, use `/announcementchannel` in your desired channel
 2. Use `/showbot` to see the welcome message
@@ -104,6 +133,10 @@ The Flask server must be reachable from the internet, so `PORT` must be a port W
 | `GITHUB_TOKEN` | ❌ No | GitHub PAT (recommended for higher rate limits) |
 | `WEBHOOK_SECRET` | ❌ No | Secret for webhook signature verification |
 | `DISCORD_GUILD_ID` | ❌ No | Server ID for instant slash command sync |
+| `CLICKUP_API_TOKEN` | ❌ No | ClickUp personal API token (enables task embeds) |
+| `CLICKUP_TEAM_ID` | ❌ No | ClickUp Workspace (team) ID |
+| `CLICKUP_SPACE_ID` | ❌ No | ClickUp Space to read the latest task from |
+| `CLICKUP_WEBHOOK_SECRET` | ❌ No | Secret returned when registering the ClickUp webhook |
 | `PORT` | ❌ No | Server port (default: 10000); set to the port Wispbyte allocates |
 
 

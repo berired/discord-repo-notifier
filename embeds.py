@@ -5,7 +5,8 @@ class EmbedBuilder:
     COLOR_PRIMARY = 0x5865F2
     COLOR_SUCCESS = 0x57F287
     COLOR_INFO = 0x3498DB
-    
+    COLOR_CLICKUP = 0x7B68EE
+
     @staticmethod
     def create_welcome_embed() -> discord.Embed:
         """Create the welcome embed"""
@@ -19,13 +20,15 @@ class EmbedBuilder:
             value=(
                 "`/showbot` - Display this welcome message\n"
                 "`/lastcommit` - View the latest commit\n"
-                "`/announcementchannel` - Set notification channel"
+                "`/lasttask` - View the latest ClickUp task\n"
+                "`/announcementchannel` - Set notification channel (and ping role)\n"
+                "`/pingrole` - Choose which role is pinged"
             ),
             inline=False
         )
         embed.add_field(
             name="🔔 Quick Action",
-            value="Click the button below to view the latest commit!",
+            value="Click a button below to view the latest commit or ClickUp task!",
             inline=False
         )
         embed.set_footer(text="GitHub Notification Bot • Powered by discord.py")
@@ -68,6 +71,44 @@ class EmbedBuilder:
         embed.set_footer(text="GitHub Repository Update")
         return embed
     
+    @staticmethod
+    def create_task_embed(task_data: Dict) -> discord.Embed:
+        """Create an embed for a ClickUp task"""
+        color = EmbedBuilder.COLOR_CLICKUP
+        status_color = task_data.get('status_color')
+        if status_color:
+            try:
+                color = int(status_color.lstrip('#'), 16)
+            except ValueError:
+                pass
+
+        embed = discord.Embed(
+            title=f"📋 {task_data['title']}",
+            color=color,
+            url=task_data['url'] or None
+        )
+
+        embed.add_field(
+            name="📌 Status",
+            value=task_data['status'].title(),
+            inline=True
+        )
+
+        embed.add_field(
+            name="👤 Assigned To",
+            value=", ".join(task_data['assignees']),
+            inline=True
+        )
+
+        embed.add_field(
+            name="⏰ Deadline",
+            value=task_data['due_date'],
+            inline=False
+        )
+
+        embed.set_footer(text="ClickUp Task Update")
+        return embed
+
     @staticmethod
     def create_error_embed(message: str) -> discord.Embed:
         """Create an error embed"""

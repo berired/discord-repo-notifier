@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from database import db
 from github_api import github_api
+from clickup_api import clickup_api
 from embeds import embed_builder
 from config import Config
 
@@ -34,6 +35,40 @@ class LastCommitButton(discord.ui.View):
                 "Failed to fetch the latest commit. Please try again later."
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
+        label="Last Task",
+        style=discord.ButtonStyle.secondary,
+        custom_id="last_task_button",
+        emoji="📋"
+    )
+    async def last_task_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        """Handle last task button click"""
+        await interaction.response.defer(thinking=True)
+        await send_latest_task(interaction)
+
+async def send_latest_task(interaction: discord.Interaction):
+    """Fetch the latest ClickUp task and reply to a deferred interaction"""
+    if not clickup_api.is_configured():
+        embed = embed_builder.create_error_embed(
+            "ClickUp is not configured. Set CLICKUP_API_TOKEN, CLICKUP_TEAM_ID and CLICKUP_SPACE_ID."
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        return
+
+    task_data = clickup_api.get_latest_task()
+    if task_data:
+        embed = embed_builder.create_task_embed(task_data)
+        await interaction.followup.send(embed=embed)
+    else:
+        embed = embed_builder.create_error_embed(
+            "Failed to fetch the latest task. Please check the ClickUp configuration."
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 class GitHubBot(commands.Bot):
     def __init__(self):
@@ -88,9 +123,10 @@ class GitHubBot(commands.Bot):
         )
         
         # Set the notification callback with the bot's event loop
-        from webhook_server import set_notification_callback
+        from webhook_server import set_notification_callback, set_task_notification_callback
         import asyncio
         set_notification_callback(send_webhook_notification, asyncio.get_event_loop())
+        set_task_notification_callback(send_task_notification)
 
 # Initialize bot
 bot = GitHubBot()
@@ -117,10 +153,17 @@ async def last_commit(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="lasttask", description="Fetch and display the latest updated task from ClickUp")
+async def last_task(interaction: discord.Interaction):
+    """Fetch the latest task from ClickUp"""
+    await interaction.response.defer(thinking=True)
+    await send_latest_task(interaction)
+
 @bot.tree.command(name="announcementchannel", description="Set the current channel for GitHub notifications")
 @app_commands.checks.has_permissions(administrator=True)
-async def announcement_channel(interaction: discord.Interaction):
-    """Set the announcement channel for webhook notifications"""
+@app_commands.describe(role="Role to ping on notifications (optional; defaults to @everyone for commits)")
+async def announcement_channel(interaction: discord.Interaction, role: discord.Role | None = None):
+    """Set the announcement channel (and optionally the ping role) for webhook notifications"""
     if interaction.channel_id is None:
         embed = embed_builder.create_error_embed(
             "Unable to determine the channel. Please try again."
@@ -129,13 +172,44 @@ async def announcement_channel(interaction: discord.Interaction):
         return
     
     await db.set_announcement_channel(interaction.channel_id)
-    
+    if role is not None:
+        await db.set_ping_role(role.id)
+
     channel_mention = f"<#{interaction.channel_id}>"
-    embed = embed_builder.create_success_embed(
+    message = (
         f"✅ Announcement channel set to {channel_mention}\n\n"
-        f"All GitHub push notifications will be sent here!"
+        f"All GitHub push and ClickUp task notifications will be sent here!"
     )
+    if role is not None:
+        message += f"\nNotifications will ping {role.mention}."
+    embed = embed_builder.create_success_embed(message)
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="pingrole", description="Choose which role is pinged on notifications (leave empty to reset)")
+@app_commands.describe(role="Role to ping; omit to reset to the default")
+@app_commands.checks.has_permissions(administrator=True)
+async def ping_role(interaction: discord.Interaction, role: discord.Role | None = None):
+    """Set or clear the role pinged on notifications"""
+    await db.set_ping_role(role.id if role else None)
+    if role:
+        message = f"Notifications will now ping {role.mention}."
+    else:
+        message = "Ping role reset. Commit notifications ping @everyone; task notifications ping nobody."
+    await interaction.response.send_message(embed=embed_builder.create_success_embed(message))
+
+@ping_role.error
+async def ping_role_error(interaction: discord.Interaction, error):
+    """Handle errors for ping role command"""
+    if isinstance(error, app_commands.errors.MissingPermissions):
+        embed = embed_builder.create_error_embed(
+            "You need Administrator permissions to set the ping role."
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+async def get_ping_mention(default: str = "") -> str:
+    """Mention string for the configured ping role, or the default if none is set"""
+    role_id = await db.get_ping_role()
+    return f"<@&{role_id}>" if role_id else default
 
 @announcement_channel.error
 async def announcement_channel_error(interaction: discord.Interaction, error):
@@ -165,10 +239,32 @@ async def send_webhook_notification(commit_data: dict):
     
     try:
         embed = embed_builder.create_commit_embed(commit_data)
-        await channel.send(content="@everyone 🚀 **New Commit Pushed!**", embed=embed)
+        ping = await get_ping_mention(default="@everyone")
+        await channel.send(content=f"{ping} 🚀 **New Commit Pushed!**", embed=embed)
         print(f"Notification sent to channel {channel_id}")
     except Exception as e:
         print(f"Error sending notification: {e}")
+
+async def send_task_notification(task_data: dict):
+    """Send a ClickUp task notification to the announcement channel"""
+    channel_id = await db.get_announcement_channel()
+
+    if not channel_id:
+        print("No announcement channel set. Skipping task notification.")
+        return
+
+    channel = bot.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        print(f"Channel {channel_id} not found or not a text channel. Skipping task notification.")
+        return
+
+    try:
+        embed = embed_builder.create_task_embed(task_data)
+        ping = await get_ping_mention()
+        await channel.send(content=f"{ping} 📋 **ClickUp Task Update**".strip(), embed=embed)
+        print(f"Task notification sent to channel {channel_id}")
+    except Exception as e:
+        print(f"Error sending task notification: {e}")
 
 def run_bot():
     """Run the Discord bot"""

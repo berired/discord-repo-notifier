@@ -3,6 +3,7 @@ import asyncio
 from typing import Callable, Optional
 from config import Config
 from github_api import github_api
+from clickup_api import clickup_api
 import hmac
 import hashlib
 
@@ -17,6 +18,35 @@ def set_notification_callback(callback: Callable, event_loop=None):
     global notification_callback, bot_event_loop
     notification_callback = callback
     bot_event_loop = event_loop
+
+task_notification_callback: Optional[Callable] = None
+
+CLICKUP_EVENTS = {
+    'taskCreated',
+    'taskStatusUpdated',
+    'taskAssigneeUpdated',
+    'taskDueDateUpdated',
+}
+
+def set_task_notification_callback(callback: Callable):
+    """Set the callback function for sending ClickUp task notifications"""
+    global task_notification_callback
+    task_notification_callback = callback
+
+def verify_clickup_signature(payload_body: bytes, signature_header: str) -> bool:
+    """Verify ClickUp webhook signature (hex HMAC-SHA256 in X-Signature)"""
+    if not Config.CLICKUP_WEBHOOK_SECRET:
+        return True  # Skip verification if no secret is set
+
+    if not signature_header:
+        return False
+
+    expected_signature = hmac.new(
+        Config.CLICKUP_WEBHOOK_SECRET.encode('utf-8'),
+        msg=payload_body,
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected_signature, signature_header)
 
 def verify_signature(payload_body: bytes, signature_header: str) -> bool:
     """Verify GitHub webhook signature"""
@@ -70,6 +100,40 @@ def github_webhook():
         print(f"Error handling webhook: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/clickup-webhook', methods=['POST'])
+def clickup_webhook():
+    """Handle ClickUp webhook events"""
+    try:
+        signature = request.headers.get('X-Signature')
+        if not verify_clickup_signature(request.data, signature):
+            return jsonify({'error': 'Invalid signature'}), 401
+
+        payload = request.json or {}
+        if payload.get('event') not in CLICKUP_EVENTS:
+            return jsonify({'message': 'Event ignored'}), 200
+
+        task_id = payload.get('task_id')
+        if not task_id:
+            return jsonify({'error': 'No task_id in payload'}), 400
+
+        task_data = clickup_api.get_task(task_id)
+        if not task_data:
+            return jsonify({'error': 'Could not fetch task'}), 502
+
+        if task_notification_callback and bot_event_loop:
+            asyncio.run_coroutine_threadsafe(
+                task_notification_callback(task_data),
+                bot_event_loop
+            )
+        else:
+            print("Warning: Bot not ready, cannot send task notification")
+
+        return jsonify({'message': 'Webhook received successfully'}), 200
+
+    except Exception as e:
+        print(f"Error handling ClickUp webhook: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -82,6 +146,7 @@ def index():
         'message': 'GitHub Webhook Server is running',
         'endpoints': {
             '/webhook': 'POST - GitHub webhook receiver',
+            '/clickup-webhook': 'POST - ClickUp webhook receiver',
             '/health': 'GET - Health check'
         }
     }), 200

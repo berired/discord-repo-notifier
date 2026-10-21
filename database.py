@@ -32,5 +32,26 @@ class Database:
             ) as cursor:
                 row = await cursor.fetchone()
                 return int(row[0]) if row else None
-            
+
+    async def set_ping_role(self, role_id: int | None):
+        """Set the role to ping in notifications, or clear it with None"""
+        async with aiosqlite.connect(self.db_path) as db:
+            if role_id is None:
+                await db.execute('DELETE FROM settings WHERE key = ?', ('ping_role',))
+            else:
+                await db.execute(
+                    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                    ('ping_role', str(role_id))
+                )
+            await db.commit()
+
+    async def get_ping_role(self) -> int | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                'SELECT value FROM settings WHERE key = ?',
+                ('ping_role',)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return int(row[0]) if row else None
+
 db = Database()
