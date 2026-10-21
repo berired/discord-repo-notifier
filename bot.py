@@ -334,16 +334,26 @@ async def announcement_channel(interaction: discord.Interaction, role: discord.R
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
-    
+
+    current_id = await db.get_announcement_channel()
+    if current_id == interaction.channel_id:
+        embed = embed_builder.create_error_embed(
+            "The announcement channel is already set in this channel.\n"
+            "Use `/pingrole` to change which role is pinged."
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    # Only one announcement channel exists at a time, so setting it elsewhere moves it
     await db.set_announcement_channel(interaction.channel_id)
     if role is not None:
         await db.set_ping_role(role.id)
 
     channel_mention = f"<#{interaction.channel_id}>"
-    message = (
-        f"✅ Announcement channel set to {channel_mention}\n\n"
-        f"All GitHub push and ClickUp task notifications will be sent here!"
-    )
+    message = f"✅ Announcement channel set to {channel_mention}\n\n"
+    if current_id:
+        message += f"It was previously <#{current_id}>.\n"
+    message += "All GitHub push and ClickUp task notifications will be sent here!"
     if role is not None:
         message += f"\nNotifications will ping {role.mention}."
     embed = embed_builder.create_success_embed(message)
